@@ -148,7 +148,7 @@ class VoiceExtractorApp(QMainWindow):
         for entry_id, entry_data in self.json_data.items():
             source_file = entry_data.get("sourceFileName", "")
             
-            # Extract character name from sourceFileName
+            # Extract character name from sourceFileName path or avatarName fallback
             char_match = re.search(r'VO_[^\\/]+\\VO_([^\\/]+)\\', source_file)
             char_name = char_match.group(1) if char_match else entry_data.get("avatarName", "")
             
@@ -156,40 +156,38 @@ class VoiceExtractorApp(QMainWindow):
             if character_filter and character_filter != char_name.lower():
                 continue
             
-            # Extract quest ID from sourceFileName
-            quest_match = re.search(r'vo_([A-Z0-9]+)_', source_file)
+            # Extract quest ID from sourceFileName (if applicable)
+            quest_match = re.search(r'vo_([A-Z0-9]+)_', source_file, re.IGNORECASE)
             quest_id = quest_match.group(1) if quest_match else ""
             
             # Apply quest ID filter
             if quest_filter and quest_filter != quest_id:
                 continue
             
-            # Get actual filename
-            filename = os.path.basename(source_file)
+            # **Исправлено: для копирования берём имя файла из ключа + ".wem"**
+            filename = entry_id + ".wem"
             
-            # Add to character data
             if char_name not in character_data:
                 character_data[char_name] = {
                     "voice_data": {},
                     "files": []
                 }
             
-            # Add voice data
             character_data[char_name]["voice_data"][entry_id] = {
                 "voiceContent": entry_data.get("voiceContent", ""),
-                "sourceFileName": filename,
+                "sourceFileName": filename,  # теперь это entry_id.wem
                 "avatarName": char_name
             }
             
-            # Add file to copy list
             files_to_copy.append({
                 "char_name": char_name,
+                "quest_id": quest_id,
                 "filename": filename,
-                "source_path": None,  # To be filled later
-                "dest_path": os.path.join(self.output_folder, char_name, filename)
+                "source_path": None,  # to find later
+                "dest_path": os.path.join(self.output_folder, char_name, quest_id, filename)
             })
         
-        # Find source files
+        # Find source files in source folder
         self.log("\nLocating source files...")
         for folder in os.listdir(self.source_folder):
             folder_path = os.path.join(self.source_folder, folder)
@@ -212,16 +210,16 @@ class VoiceExtractorApp(QMainWindow):
         
         for file_info in files_to_copy:
             char_name = file_info["char_name"]
+            quest_id = file_info["quest_id"]
             
             if not file_info["source_path"]:
                 self.log(f"File not found: {file_info['filename']}")
                 continue
             
-            # Create character folder
-            char_folder = os.path.join(self.output_folder, char_name)
+            # Создаем вложенные папки character/quest_id/
+            char_folder = os.path.join(self.output_folder, char_name, quest_id)
             os.makedirs(char_folder, exist_ok=True)
             
-            # Copy file
             try:
                 shutil.copy2(file_info["source_path"], file_info["dest_path"])
                 total_copied += 1
